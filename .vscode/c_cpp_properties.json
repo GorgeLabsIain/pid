@@ -45,6 +45,7 @@
         {
             "name": "Win32",
             "includePath": [
+                "${workspaceRoot}",
                 "${workspaceRoot}"
             ],
             "defines": [
