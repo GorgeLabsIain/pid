@@ -1,37 +1,48 @@
+/*
+ * Copyright (c) 2018 Gorge Labs Limited.  All rights reserved.
+ *
+ * Digital PID Controller Revision 1.0
+ *
+ */
+
 #include "pid.h"
 
+// Static definitions
 #define FALSE 0
 #define TRUE 1
-#define ERROR_VALUE -1.0
+#define ERROR_VALUE -1.0  // Functions will return this if any error occured
 
+// PID controller parameters - these values are expected to change rarely
 struct controller_params
 {
-	double Kp;
-	double Ki;
-	double Kd;
-	double outputMax;
-	double outputMin;
-	double setpoint;
+	double Kp;          // Proportional weight
+	double Ki;          // Integral weight
+	double Kd;          // Derivative weight
+	double outputMax;   // Limit on maximum controller output
+	double outputMin;   // Limit on minimum controller output
+	double setpoint;    // Desired temperature setpoint
 };
 
-struct controller_params params[MAX_CONTROLLERS];
-
+// PID controller working variables - these values are expected to change regularly
 struct controller_values
 {
-	double actual;
-	double errorP;
-	double errorI;
-	double errorD;
-	double previous;
-	double output;
-	int initialised;
+	double actual;      // Current temperature value
+	double errorP;      // Current proportional error
+	double errorI;      // Cumulative integral error
+	double errorD;      // Current derivative error
+	double previous;    // Previous temperature value (required to calc derivative error)
+	double output;      // Pulse width controller output
+	int initialised;    // Flag set after 1st iteration of the controller (must sample temperature twice to calc derivative error)
 };
 
-struct controller_values values[MAX_CONTROLLERS];
+// For each PID controller there is an instance of the parameters and an instance of the working variables 
+struct controller_params params[MAX_CONTROLLERS];  // store in non-volatile memory
+struct controller_values values[MAX_CONTROLLERS];  // store in RAM
 
-
-void initControllers()
+// Call this function when in Initialisation state
+void initParameters()
 {
+	// for each controller set up some default parameter values
 	for (int index = 0; index < MAX_CONTROLLERS; index++)
 	{
 		params[index].Kp = 1.0;
@@ -40,7 +51,15 @@ void initControllers()
 		params[index].outputMax = 100.0;
 		params[index].outputMin = 0.0;
 		params[index].setpoint = 32.0;
+	}
+}
 
+// Call this function when on entry to Operation state
+void initControllers()
+{
+	// for each controller set up some initial working values
+	for (int index = 0; index < MAX_CONTROLLERS; index++)
+	{
 		values[index].actual = 32.0;
 		values[index].errorP = 0.0;
 		values[index].errorP = 0.0;
@@ -52,66 +71,7 @@ void initControllers()
 }
 
 
-double getKp(int index)
-{
-	double value = ERROR_VALUE;
-	if (index < MAX_CONTROLLERS)
-	{
-		value = params[index].Kp;
-	}
-	return value;
-}
-
-double getKi(int index)
-{
-	double value = ERROR_VALUE;
-	if (index < MAX_CONTROLLERS)
-	{
-		value = params[index].Ki;
-	}
-	return value;
-}
-
-double getKd(int index)
-{
-	double value = ERROR_VALUE;
-	if (index < MAX_CONTROLLERS)
-	{
-		value = params[index].Kd;
-	}
-	return value;
-}
-
-double getOutputMax(int index)
-{
-	double value = ERROR_VALUE;
-	if (index < MAX_CONTROLLERS)
-	{
-		value = params[index].outputMax;
-	}
-	return value;
-}
-
-double getOutputMin(int index)
-{
-	double value = ERROR_VALUE;
-	if (index < MAX_CONTROLLERS)
-	{
-		value = params[index].outputMin;
-	}
-	return value;
-}
-
-double getSetpoint(int index)
-{
-	double value = ERROR_VALUE;
-	if (index < MAX_CONTROLLERS)
-	{
-		value = params[index].setpoint;
-	}
-	return value;
-}
-
+// Functions to set configuration parameters - should the user change any of them
 void setKp(int index, double value)
 {
 	if (index < MAX_CONTROLLERS)
@@ -175,7 +135,6 @@ void setOutputMin(int index, double value)
 	}
 }
 
-
 void setSetpoint(int index, double value)
 {
 	if (index < MAX_CONTROLLERS)
@@ -187,6 +146,69 @@ void setSetpoint(int index, double value)
 	}
 }
 
+// Functions to check configuration parameters - check after attempting to set them
+double getKp(int index)
+{
+	double value = ERROR_VALUE;
+	if (index < MAX_CONTROLLERS)
+	{
+		value = params[index].Kp;
+	}
+	return value;
+}
+
+double getKi(int index)
+{
+	double value = ERROR_VALUE;
+	if (index < MAX_CONTROLLERS)
+	{
+		value = params[index].Ki;
+	}
+	return value;
+}
+
+double getKd(int index)
+{
+	double value = ERROR_VALUE;
+	if (index < MAX_CONTROLLERS)
+	{
+		value = params[index].Kd;
+	}
+	return value;
+}
+
+double getOutputMax(int index)
+{
+	double value = ERROR_VALUE;
+	if (index < MAX_CONTROLLERS)
+	{
+		value = params[index].outputMax;
+	}
+	return value;
+}
+
+double getOutputMin(int index)
+{
+	double value = ERROR_VALUE;
+	if (index < MAX_CONTROLLERS)
+	{
+		value = params[index].outputMin;
+	}
+	return value;
+}
+
+double getSetpoint(int index)
+{
+	double value = ERROR_VALUE;
+	if (index < MAX_CONTROLLERS)
+	{
+		value = params[index].setpoint;
+	}
+	return value;
+}
+
+
+// Push the temperature readings from the WTS into the PID controller - call every time a WTS temperature reading is received
 void setTemperature(int index, double value)
 {
 	if (index < MAX_CONTROLLERS)
@@ -196,8 +218,10 @@ void setTemperature(int index, double value)
 
 }
 
+// Execute the PID controller - call every Duty Cycle period
 void updateController(int index)
 {
+	// check if there is a previous temperature reading, so that the derivative error can be calculated
 	if (values[index].initialised == TRUE)
 	{
 		// calculate error terms
@@ -230,34 +254,16 @@ void updateController(int index)
 	}
 	else
 	{
+		// first execution of the controller, about to save the temperature value, so will be good to go next time around
 		values[index].initialised = TRUE;
 	}
 
-	// save current process value
+	// save current temperature value for next execution of the controller
 	values[index].previous = values[index].actual;
-
 }
 
+// Get the PID controller output - call every Duty Cycle period, then update the PWM module
 double getPulseWidth(int index)
 {
 	return values[index].output;
 }
-
-
-
-// debugging functions only
-double getErrorP(int index)
-{
-	return (params[index].Kp * values[index].errorP);
-}
-
-double getErrorI(int index)
-{
-	return values[index].errorI;
-}
-
-double getErrorD(int index)
-{
-	return (params[index].Kd * values[index].errorD);
-}
-
