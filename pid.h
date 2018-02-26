@@ -15,26 +15,26 @@ void initParameters();
 void initControllers();
 
 // Functions to set configuration parameters - should the user change any of them
-void setKp(int index, double value);
-void setKi(int index, double value);
-void setKd(int index, double value);
-void setOutputMax(int index, double value);
-void setOutputMin(int index, double value);
-void setSetpoint(int index, double value);
+void setKp(int index, float value);
+void setKi(int index, float value);
+void setKd(int index, float value);
+void setOutputMax(int index, float value);
+void setOutputMin(int index, float value);
+void setSetpoint(int index, float value);
 
 // Functions to check configuration parameters - check after attempting to set them
-double getKp(int index);
-double getKi(int index);
-double getKd(int index);
-double getOutputMax(int index);
-double getOutputMin(int index);
-double getSetpoint(int index);
+float getKp(int index);
+float getKi(int index);
+float getKd(int index);
+float getOutputMax(int index);
+float getOutputMin(int index);
+float getSetpoint(int index);
 
 // Push the temperature readings from the WTS into the PID controller - call every time a WTS temperature reading is received
-void setTemperature(int index, double value);
+void setTemperature(int index, float value);
 
 // Execute the PID controller - call every Duty Cycle period
 void updateController(int index);
 
 // Get the PID controller output - call every Duty Cycle period, then update the PWM module
-double getPulseWidth(int index);
+float getPulseWidth(int index);

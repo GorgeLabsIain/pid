@@ -10,29 +10,31 @@
 // Static definitions
 #define FALSE 0
 #define TRUE 1
-#define ERROR_VALUE -1.0  // Functions will return this if any error occured
+#define ERROR_VALUE -1.0       // Functions will return this if any error occured
+#define WATCHDOG_LIMIT 3       // Number of duty cycles without temperature reading before stopping controller
 
 // PID controller parameters - these values are expected to change rarely
 struct controller_params
 {
-	double Kp;          // Proportional weight
-	double Ki;          // Integral weight
-	double Kd;          // Derivative weight
-	double outputMax;   // Limit on maximum controller output
-	double outputMin;   // Limit on minimum controller output
-	double setpoint;    // Desired temperature setpoint
+	float Kp;                  // Proportional weight
+	float Ki;                  // Integral weight
+	float Kd;                  // Derivative weight
+	float outputMax;           // Limit on maximum controller output
+	float outputMin;           // Limit on minimum controller output
+	float setpoint;            // Desired temperature setpoint
 };
 
 // PID controller working variables - these values are expected to change regularly
 struct controller_values
 {
-	double actual;      // Current temperature value
-	double errorP;      // Current proportional error
-	double errorI;      // Cumulative integral error
-	double errorD;      // Current derivative error
-	double previous;    // Previous temperature value (required to calc derivative error)
-	double output;      // Pulse width controller output
-	int initialised;    // Flag set after 1st iteration of the controller (must sample temperature twice to calc derivative error)
+	float actual;              // Current temperature value
+	float errorP;              // Current proportional error
+	float errorI;              // Cumulative integral error
+	float errorD;              // Current derivative error
+	float previous;            // Previous temperature value (required to calc derivative error)
+	float output;              // Pulse width controller output
+	unsigned int watchdog;     // Watchdog counter to detect when actual temperature samples interrupted
+	unsigned int initialised;  // Flag set after 1st iteration of the controller (must sample temperature twice to calc derivative error)
 };
 
 // For each PID controller there is an instance of the parameters and an instance of the working variables 
@@ -45,12 +47,12 @@ void initParameters()
 	// for each controller set up some default parameter values
 	for (int index = 0; index < MAX_CONTROLLERS; index++)
 	{
-		params[index].Kp = 1.0;
-		params[index].Ki = 0.0;
-		params[index].Kd = 0.0;
-		params[index].outputMax = 100.0;
-		params[index].outputMin = 0.0;
-		params[index].setpoint = 32.0;
+		params[index].Kp = 1.0f;
+		params[index].Ki = 0.0f;
+		params[index].Kd = 0.0f;
+		params[index].outputMax = 100.0f;
+		params[index].outputMin = 0.0f;
+		params[index].setpoint = 32.0f;
 	}
 }
 
@@ -60,52 +62,53 @@ void initControllers()
 	// for each controller set up some initial working values
 	for (int index = 0; index < MAX_CONTROLLERS; index++)
 	{
-		values[index].actual = 32.0;
-		values[index].errorP = 0.0;
-		values[index].errorP = 0.0;
-		values[index].errorP = 0.0;
-		values[index].previous = 0.0;
-		values[index].output = 0.0;
+		values[index].actual = 32.0f;
+		values[index].errorP = 0.0f;
+		values[index].errorP = 0.0f;
+		values[index].errorP = 0.0f;
+		values[index].previous = values[index].actual;
+		values[index].output = params[index].outputMin;
+		values[index].watchdog = 0;
 		values[index].initialised = FALSE;
 	}
 }
 
 
 // Functions to set configuration parameters - should the user change any of them
-void setKp(int index, double value)
+void setKp(int index, float value)
 {
 	if (index < MAX_CONTROLLERS)
 	{
-		if (value > 0.0 && params[index].Kp != value)
+		if (value > 0.0f && params[index].Kp != value)
 		{
 			params[index].Kp = value;
 		}
 	}
 }
 
-void setKi(int index, double value)
+void setKi(int index, float value)
 {
 	if (index < MAX_CONTROLLERS)
 	{
-		if (value > 0.0 && params[index].Ki != value)
+		if (value > 0.0f && params[index].Ki != value)
 		{
 			params[index].Ki = value;
 		}
 	}
 }
 
-void setKd(int index, double value)
+void setKd(int index, float value)
 {
 	if (index < MAX_CONTROLLERS)
 	{
-		if (value > 0.0 && params[index].Ki != value)
+		if (value > 0.0f && params[index].Ki != value)
 		{
 			params[index].Ki = value;
 		}
 	}
 }
 
-void setOutputMax(int index, double value)
+void setOutputMax(int index, float value)
 {
 	if (index < MAX_CONTROLLERS)
 	{
@@ -120,7 +123,7 @@ void setOutputMax(int index, double value)
 	}
 }
 
-void setOutputMin(int index, double value)
+void setOutputMin(int index, float value)
 {
 	if (index < MAX_CONTROLLERS)
 	{
@@ -135,7 +138,7 @@ void setOutputMin(int index, double value)
 	}
 }
 
-void setSetpoint(int index, double value)
+void setSetpoint(int index, float value)
 {
 	if (index < MAX_CONTROLLERS)
 	{
@@ -147,9 +150,9 @@ void setSetpoint(int index, double value)
 }
 
 // Functions to check configuration parameters - check after attempting to set them
-double getKp(int index)
+float getKp(int index)
 {
-	double value = ERROR_VALUE;
+	float value = ERROR_VALUE;
 	if (index < MAX_CONTROLLERS)
 	{
 		value = params[index].Kp;
@@ -157,9 +160,9 @@ double getKp(int index)
 	return value;
 }
 
-double getKi(int index)
+float getKi(int index)
 {
-	double value = ERROR_VALUE;
+	float value = ERROR_VALUE;
 	if (index < MAX_CONTROLLERS)
 	{
 		value = params[index].Ki;
@@ -167,9 +170,9 @@ double getKi(int index)
 	return value;
 }
 
-double getKd(int index)
+float getKd(int index)
 {
-	double value = ERROR_VALUE;
+	float value = ERROR_VALUE;
 	if (index < MAX_CONTROLLERS)
 	{
 		value = params[index].Kd;
@@ -177,9 +180,9 @@ double getKd(int index)
 	return value;
 }
 
-double getOutputMax(int index)
+float getOutputMax(int index)
 {
-	double value = ERROR_VALUE;
+	float value = ERROR_VALUE;
 	if (index < MAX_CONTROLLERS)
 	{
 		value = params[index].outputMax;
@@ -187,9 +190,9 @@ double getOutputMax(int index)
 	return value;
 }
 
-double getOutputMin(int index)
+float getOutputMin(int index)
 {
-	double value = ERROR_VALUE;
+	float value = ERROR_VALUE;
 	if (index < MAX_CONTROLLERS)
 	{
 		value = params[index].outputMin;
@@ -197,9 +200,9 @@ double getOutputMin(int index)
 	return value;
 }
 
-double getSetpoint(int index)
+float getSetpoint(int index)
 {
-	double value = ERROR_VALUE;
+	float value = ERROR_VALUE;
 	if (index < MAX_CONTROLLERS)
 	{
 		value = params[index].setpoint;
@@ -209,11 +212,12 @@ double getSetpoint(int index)
 
 
 // Push the temperature readings from the WTS into the PID controller - call every time a WTS temperature reading is received
-void setTemperature(int index, double value)
+void setTemperature(int index, float value)
 {
 	if (index < MAX_CONTROLLERS)
 	{
 			values[index].actual = value;
+			values[index].watchdog = 0;
 	}
 
 }
@@ -221,49 +225,63 @@ void setTemperature(int index, double value)
 // Execute the PID controller - call every Duty Cycle period
 void updateController(int index)
 {
-	// check if there is a previous temperature reading, so that the derivative error can be calculated
-	if (values[index].initialised == TRUE)
+	// check if temperature samples have been received
+	if (values[index].watchdog < WATCHDOG_LIMIT)
 	{
-		// calculate error terms
-		values[index].errorP = params[index].setpoint - values[index].actual;
-		values[index].errorI += params[index].Ki * values[index].errorP;
-		values[index].errorD = values[index].actual - values[index].previous;
-
-		// check error bounds
-		if (values[index].errorI>params[index].outputMax)
+		// save current temperature value for next execution of the controller
+		values[index].previous = values[index].actual;
+		
+		// check if first execution of the controller
+		if (values[index].initialised == FALSE)
 		{
-			values[index].errorI = params[index].outputMax;
+			// toggle flag so that controller is executed at the next duty cycle
+			values[index].initialised = TRUE;
 		}
-		if (values[index].errorI<params[index].outputMin)
+		// not first execution, so there is a previous temperature reading which enables derivative error to be calculated
+		else
 		{
-			values[index].errorI = params[index].outputMin;
-		}
+			// calculate error terms
+			values[index].errorP = params[index].setpoint - values[index].actual;
+			values[index].errorI += params[index].Ki * values[index].errorP;
+			values[index].errorD = values[index].actual - values[index].previous;
 
-		// calculate controller output
-		values[index].output = (params[index].Kp*values[index].errorP) + values[index].errorI - (params[index].Kd*values[index].errorD);
+			// check error bounds
+			if (values[index].errorI > params[index].outputMax)
+			{
+				values[index].errorI = params[index].outputMax;
+			}
+			if (values[index].errorI < params[index].outputMin)
+			{
+				values[index].errorI = params[index].outputMin;
+			}
 
-		// check output bounds
-		if (values[index].output>params[index].outputMax)
-		{
-			values[index].output = params[index].outputMax;
-		}
-		if (values[index].output<params[index].outputMin)
-		{
-			values[index].output = params[index].outputMin;
+			// calculate controller output
+			values[index].output = (params[index].Kp*values[index].errorP) + values[index].errorI - (params[index].Kd*values[index].errorD);
+
+			// check output bounds
+			if (values[index].output > params[index].outputMax)
+			{
+				values[index].output = params[index].outputMax;
+			}
+			if (values[index].output < params[index].outputMin)
+			{
+				values[index].output = params[index].outputMin;
+			}
 		}
 	}
 	else
 	{
-		// first execution of the controller, about to save the temperature value, so will be good to go next time around
-		values[index].initialised = TRUE;
+		// no temperature samples, so set output to minimum allowed
+		values[index].output = params[index].outputMin;
+        // set flag so that when temperature samples start re-arriving controller is re-initialised
+		values[index].initialised = FALSE;
 	}
-
-	// save current temperature value for next execution of the controller
-	values[index].previous = values[index].actual;
+	// increment watchdog counter
+	values[index].watchdog += 1;
 }
 
 // Get the PID controller output - call every Duty Cycle period, then update the PWM module
-double getPulseWidth(int index)
+float getPulseWidth(int index)
 {
 	return values[index].output;
 }
