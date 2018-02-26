@@ -5,6 +5,7 @@
  *
  */
 
+#include <math.h>
 #include "pid.h"
 
 // Static definitions
@@ -38,8 +39,8 @@ struct controller_values
 };
 
 // For each PID controller there is an instance of the parameters and an instance of the working variables 
-struct controller_params params[MAX_CONTROLLERS];  // store in non-volatile memory
-struct controller_values values[MAX_CONTROLLERS];  // store in RAM
+struct controller_params params[MAX_CONTROLLERS];
+struct controller_values values[MAX_CONTROLLERS];
 
 // Call this function when in Initialisation state
 void initParameters()
@@ -64,8 +65,8 @@ void initControllers()
 	{
 		values[index].actual = 32.0f;
 		values[index].errorP = 0.0f;
-		values[index].errorP = 0.0f;
-		values[index].errorP = 0.0f;
+		values[index].errorI = 0.0f;
+		values[index].errorD = 0.0f;
 		values[index].previous = values[index].actual;
 		values[index].output = params[index].outputMin;
 		values[index].watchdog = 0;
@@ -283,5 +284,5 @@ void updateController(int index)
 // Get the PID controller output - call every Duty Cycle period, then update the PWM module
 float getPulseWidth(int index)
 {
-	return values[index].output;
+	return (float)round(values[index].output);
 }
